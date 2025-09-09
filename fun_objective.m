@@ -131,7 +131,7 @@ try
     catch ME
         warning('fun_objective:flex_eval', ...
                 'fun_flexibility failed: %s', ME.message);
-        K_flex_long = kPR_year + kGR_year + sum(xL) * 10;
+         K_flex_long = kPR_year + kGR_year + sum(xL==1) * 10;
     end
     % 综合灵活性：结合中长期和短期
     % 可以调整权重：0.7为中长期权重，0.3为短期权重
@@ -205,7 +205,7 @@ function C_invest = calculate_investment_cost_2in1(num_pv_nodes, num_wind_nodes,
     C_ess = sum(num_ess_nodes) * s_cn * (cP_ess + cE_ess * 4);  % 假设4小时储能
     
     % 联络开关投资（假设单价）
-    C_switch = sum(xL) * 50000;  % 假设每个联络开关5万元
+   C_switch = sum(xL==1) * 50000;  % 假设每个联络开关5万元
     
     % SOP投资
     C_sop = 0;
@@ -228,3 +228,4 @@ function C_invest = calculate_investment_cost_2in1(num_pv_nodes, num_wind_nodes,
                 C_ess * CRF_ess + C_sop * CRF_sop + ...
                 C_switch * CRF_switch) / 1e4 / 365;  % 日均
 end
+
