@@ -125,8 +125,14 @@ try
     end
     
     %% ---------- 7) 计算中长期灵活性 ----------
-    % 中长期灵活性考虑的是系统配置的长期适应能力
-    K_flex_long = fun_flexibility_2in1(xL, cap_sop_nodes);   % 越大越好
+    % 中长期灵活性考虑系统配置的长期适应能力
+    try
+        K_flex_long = fun_flexibility(xL, cap_sop_nodes);   % 越大越好
+    catch ME
+        warning('fun_objective:flex_eval', ...
+                'fun_flexibility failed: %s', ME.message);
+        K_flex_long = kPR_year + kGR_year + sum(xL) * 10;
+    end
     
     % 综合灵活性：结合中长期和短期
     % 可以调整权重：0.7为中长期权重，0.3为短期权重
