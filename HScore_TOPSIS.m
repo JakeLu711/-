@@ -159,16 +159,23 @@ function [C_cost, C_carbon, K_flex] = evaluate_objectives(x)
     call_count = call_count + 1;
     
     try
-        % 获取联络开关状态
+        % 获取支路类型与SOP容量
         global numBr;
-        xL = x(end-numBr+1:end);
-        
+        branch_types   = x(end-2*numBr+1:end-numBr);
+        sop_cap_nodes  = x(end-numBr+1:end);
+        % 将支路类型编码转换为0/1联络开关状态
+        xL = double(branch_types >= 0.5 & branch_types < 1.5);
         % 调用下层优化
         [~, C_cost, C_carbon, kPR_d, kGR_d] = runLowerLayer(x, 'GA');
         
-        % 计算中长期灵活性 (如果fun_flexibility不存在，用简化版本)
+        % 计算中长期灵活性 (如果fun_flexibility不存在或失败，用简化版本)
         if exist('fun_flexibility', 'file')
-            K_flex = fun_flexibility(xL);
+            try
+                K_flex = fun_flexibility(xL, sop_cap_nodes);
+            catch MEflex
+                fprintf('⚠️ 灵活性计算失败: %s\n', MEflex.message);
+                K_flex = kPR_d + kGR_d + sum(xL) * 10;  % 回退简化计算
+            end
         else
             % 简化的灵活性计算
             K_flex = kPR_d + kGR_d + sum(xL) * 10;  % 临时计算
@@ -183,6 +190,7 @@ function [C_cost, C_carbon, K_flex] = evaluate_objectives(x)
             fprintf('   短期灵活性: kPR=%.3f, kGR=%.3f\n', kPR_d, kGR_d);
             fprintf('   中长期灵活性: %.2f\n', K_flex);
             fprintf('   联络开关状态: %s\n', mat2str(round(xL)));
+            fprintf('   SOP容量: %s\n', mat2str(sop_cap_nodes,3));
         end
         
         % 异常检测
