@@ -245,8 +245,8 @@ if cap_SL > 0
     A_SL = ratio_SL * sum(baseLoad(1, loc_SL));  % SL可双向
 end
 
-% 联络开关和SOP的转移能力
-A_switch = sum(xL) * 5000;              % 每个联络开关5MVA
+% 联络开关和SOP的转移能力␊
+A_switch = sum(xL==1) * 5000;           % 每个联络开关5MVA
 A_SOP = sum(cap_sop_nodes) * 1000;      % MVA转kVA
 
 % 总调节能力
@@ -322,5 +322,6 @@ f(4) = -kGR_d;
 
 % 最终确认
 fprintf('最终返回值: f = [%.4e, %.4e, %.4e, %.4e]\n', f(1), f(2), f(3), f(4));
+
 
 end  % function lower_obj 结束
