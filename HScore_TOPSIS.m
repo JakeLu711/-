@@ -159,16 +159,20 @@ function [C_cost, C_carbon, K_flex] = evaluate_objectives(x)
     call_count = call_count + 1;
     
     try
-        % 获取联络开关状态
-        global numBr;
-        xL = x(end-numBr+1:end);
-        
+        % 获取联络开关和SOP容量并离散化联络开关
+        global numBr st_pvc st_windc st_essc;
+        idx = length(st_pvc) + length(st_windc) + length(st_essc);
+        xL = x(idx+1:idx+numBr);
+        idx = idx + numBr;
+        cap_sop_nodes = x(idx+1:idx+numBr);
+        xL = xL >= 0.5;
+
         % 调用下层优化
         [~, C_cost, C_carbon, kPR_d, kGR_d] = runLowerLayer(x, 'GA');
-        
+
         % 计算中长期灵活性 (如果fun_flexibility不存在，用简化版本)
         if exist('fun_flexibility', 'file')
-            K_flex = fun_flexibility(xL);
+            K_flex = fun_flexibility(xL, cap_sop_nodes);
         else
             % 简化的灵活性计算
             K_flex = kPR_d + kGR_d + sum(xL) * 10;  % 临时计算
@@ -182,7 +186,7 @@ function [C_cost, C_carbon, K_flex] = evaluate_objectives(x)
             fprintf('   碳排放: %.4f t\n', C_carbon);
             fprintf('   短期灵活性: kPR=%.3f, kGR=%.3f\n', kPR_d, kGR_d);
             fprintf('   中长期灵活性: %.2f\n', K_flex);
-            fprintf('   联络开关状态: %s\n', mat2str(round(xL)));
+            fprintf('   联络开关状态: %s\n', mat2str(xL));
         end
         
         % 异常检测

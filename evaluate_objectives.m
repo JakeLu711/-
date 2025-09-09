@@ -47,7 +47,8 @@ function [C_cost, C_carbon, K_flex] = evaluate_objectives(x)
         % 4. 调用runLowerLayer
         [~, C_cost, C_carbon, kPR_d, kGR_d] = runLowerLayer(upx, 'GA');
         
-        % 5. 计算中长期灵活性
+        % 5. 计算中长期灵活性（确保联络开关状态离散化）
+        xL = xL >= 0.5;
         K_flex = fun_flexibility(xL, cap_sop_nodes);
         
     catch ME

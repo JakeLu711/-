@@ -31,8 +31,9 @@ p = p + length(st_windc);
 cap_ess_nodes = upx(p:p+length(st_essc)-1);
 p = p + length(st_essc);
 
-% 联络开关状态 (0/1)
+% 联络开关状态 (0/1)，允许输入为连续，需要离散化
 xL = upx(p:p+numBr-1);
+xL_state = xL >= 0.5;   % 离散化为0/1
 p = p + numBr;
 
 % SOP容量 (MVA)
@@ -83,11 +84,12 @@ for k = 1:K
         %% === 处理支路状态（2选1） ===
         for i = 1:numBr
             br_idx = tieBranches(i);
-            
-            if xL(i) == 1
+            state = xL_state(i);  % 0/1离散状态
+
+            if state == 1
                 % 安装了联络开关，支路闭合
                 mpc.branch(br_idx, 11) = 1;  % BR_STATUS = 1
-                
+
             elseif cap_sop_nodes(i) > 0
                 % 安装了SOP，支路闭合且有容量限制
                 mpc.branch(br_idx, 11) = 1;  % BR_STATUS = 1
@@ -95,7 +97,7 @@ for k = 1:K
                 % 降低支路阻抗以模拟SOP的低损耗特性
                 mpc.branch(br_idx, 3) = mpc.branch(br_idx, 3) * 0.1;  % 降低电阻
                 mpc.branch(br_idx, 4) = mpc.branch(br_idx, 4) * 0.1;  % 降低电抗
-                
+
             else
                 % 常开状态
                 mpc.branch(br_idx, 11) = 0;  % BR_STATUS = 0
@@ -246,7 +248,7 @@ if cap_SL > 0
 end
 
 % 联络开关和SOP的转移能力
-A_switch = sum(xL) * 5000;              % 每个联络开关5MVA
+A_switch = sum(xL_state) * 5000;              % 每个联络开关5MVA
 A_SOP = sum(cap_sop_nodes) * 1000;      % MVA转kVA
 
 % 总调节能力
@@ -281,7 +283,7 @@ fprintf('功率调节灵活性 kPR = %.4f\n', kPR_d);
 
 %% 网架调节灵活性
 % 有效支路数（联络开关或SOP）
-effective_branches = sum(xL) + sum(cap_sop_nodes > 0);
+effective_branches = sum(xL_state) + sum(cap_sop_nodes > 0);
 % 总转移容量
 S_C_total = A_switch + A_SOP;
 
@@ -311,7 +313,7 @@ fprintf('  PV: %s MW at nodes %s\n', mat2str(cap_pv_nodes, 2), mat2str(st_pvc));
 fprintf('  Wind: %s MW at nodes %s\n', mat2str(cap_wind_nodes, 2), mat2str(st_windc));
 fprintf('  ESS: %s MW at nodes %s\n', mat2str(cap_ess_nodes, 2), mat2str(st_essc));
 fprintf('  Switches: %d个, SOP: %d个 (总%.1f MVA)\n', ...
-        sum(xL), sum(cap_sop_nodes > 0), sum(cap_sop_nodes));
+        sum(xL_state), sum(cap_sop_nodes > 0), sum(cap_sop_nodes));
 
 % 构建返回值
 f = zeros(1, 4);  % 预分配
