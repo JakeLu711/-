@@ -280,8 +280,8 @@ kPR_d = max(0, min(kPR_d, 1));
 fprintf('功率调节灵活性 kPR = %.4f\n', kPR_d);
 
 %% 网架调节灵活性
-% 有效支路数（联络开关或SOP）
-effective_branches = sum(xL) + sum(cap_sop_nodes > 0);
+% 有效支路数（联络开关或SOP）␊
+effective_branches = sum(xL==1) + sum(cap_sop_nodes > 0);
 % 总转移容量
 S_C_total = A_switch + A_SOP;
 
@@ -310,8 +310,8 @@ fprintf('\n多点安装配置:\n');
 fprintf('  PV: %s MW at nodes %s\n', mat2str(cap_pv_nodes, 2), mat2str(st_pvc));
 fprintf('  Wind: %s MW at nodes %s\n', mat2str(cap_wind_nodes, 2), mat2str(st_windc));
 fprintf('  ESS: %s MW at nodes %s\n', mat2str(cap_ess_nodes, 2), mat2str(st_essc));
-fprintf('  Switches: %d个, SOP: %d个 (总%.1f MVA)\n', ...
-        sum(xL), sum(cap_sop_nodes > 0), sum(cap_sop_nodes));
+fprintf('  Switches: %d个, SOP: %d个 (总%.1f MVA)\n', ...␊
+        sum(xL==1), sum(cap_sop_nodes > 0), sum(cap_sop_nodes));
 
 % 构建返回值
 f = zeros(1, 4);  % 预分配
@@ -325,3 +325,4 @@ fprintf('最终返回值: f = [%.4e, %.4e, %.4e, %.4e]\n', f(1), f(2), f(3), f(4
 
 
 end  % function lower_obj 结束
+
