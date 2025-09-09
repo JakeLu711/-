@@ -23,13 +23,12 @@ global GA_MAXGEN GA_POPSIZE
 global VERBOSE_SEASON
 
 switch RUN_MODE
-    case 'QUICK'
-        HS_MAXITERS = 50;    % 增加到50次
-        HS_HMS = 10;         
-        GA_MAXGEN = 10;      
-        GA_POPSIZE = 10;     
+        case 'QUICK'
+        HS_MAXITERS = 50;    % 增加到50次␊
+        HS_HMS = 10;
+        GA_MAXGEN = 20;
+        GA_POPSIZE = 30;
         fprintf('运行模式: 快速测试\n');
-        
     case 'NORMAL'
         HS_MAXITERS = 200;   
         HS_HMS = 10;         
