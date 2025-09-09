@@ -24,18 +24,17 @@ fprintf('\n=== runLowerLayer 参数获取 ===\n');
 if exist('GA_MAXGEN', 'var') && ~isempty(GA_MAXGEN) && GA_MAXGEN > 0
     ga_max_gen = GA_MAXGEN;
 else
-    ga_max_gen = 3;
+    ga_max_gen = 20;
 end
-
 if exist('GA_POPSIZE', 'var') && ~isempty(GA_POPSIZE) && GA_POPSIZE > 0
     ga_pop_size = GA_POPSIZE;
 else
-    ga_pop_size = 5;
+    ga_pop_size = 30;
 end
 
-% 参数范围约束
-ga_max_gen = max(1, min(ga_max_gen, 15));
-ga_pop_size = max(3, min(ga_pop_size, 30));
+% 参数范围约束␊
+ga_max_gen = max(1, min(ga_max_gen, 100));
+ga_pop_size = max(3, min(ga_pop_size, 100));
 
 %% ========== 第3部分：决策变量设置 ==========
 nVar = 5 * K * T;
