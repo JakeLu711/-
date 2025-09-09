@@ -670,8 +670,8 @@ function [results] = analyze_seasonal_performance(solution)
         fprintf('  碳减排效果: %.1f%%\n', carbon_reduction);
     end
     
-    % 网架利用
-    effective_branches = sum(xL) + sum(cap_sop_nodes > 0);
+   % 网架利用␊
+    effective_branches = sum(xL==1) + sum(cap_sop_nodes > 0);
     fprintf('  网架利用: %d/%d条支路启用 (%.0f%%)\n', ...
             effective_branches, numBr, effective_branches/numBr*100);
 end
@@ -894,3 +894,4 @@ function plot_pareto_front_3d_soft(paretoSet, best_solution)
     set(gcf, 'Color', [0.98, 0.98, 0.98]);
     set(gca, 'Color', [1, 1, 1]);
 end
+
