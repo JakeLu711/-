@@ -150,66 +150,6 @@ function HM = updateMemory(HM, NCHV, fval, NVAR)
         HM(worstIdx,NVAR+1) = fval;
     end
 end
-
-%% 子函数：评估目标值
-function [C_cost, C_carbon, K_flex] = evaluate_objectives(x)
-    % 调试版本的目标函数评估
-    persistent call_count;
-    if isempty(call_count), call_count = 0; end
-    call_count = call_count + 1;
-    
-    try
-        % 获取支路类型与SOP容量
-        global numBr;
-        branch_types   = x(end-2*numBr+1:end-numBr);
-        sop_cap_nodes  = x(end-numBr+1:end);
-        % 将支路类型编码转换为0/1联络开关状态
-        xL = double(branch_types >= 0.5 & branch_types < 1.5);
-        % 调用下层优化
-        [~, C_cost, C_carbon, kPR_d, kGR_d] = runLowerLayer(x, 'GA');
-        
-        % 计算中长期灵活性 (如果fun_flexibility不存在或失败，用简化版本)
-        if exist('fun_flexibility', 'file')
-            try
-                K_flex = fun_flexibility(xL, sop_cap_nodes);
-            catch MEflex
-                fprintf('⚠️ 灵活性计算失败: %s\n', MEflex.message);
-                K_flex = kPR_d + kGR_d + sum(xL) * 10;  % 回退简化计算
-            end
-        else
-            % 简化的灵活性计算
-            K_flex = kPR_d + kGR_d + sum(xL) * 10;  % 临时计算
-        end
-        
-        % 调试输出 - 每20次输出一次
-        if call_count <= 3 || mod(call_count, 20) == 0
-            fprintf('📊 目标函数调用#%d:\n', call_count);
-            fprintf('   输入变量范围: [%.4f, %.4f]\n', min(x), max(x));
-            fprintf('   经济成本: %.2f 万元\n', C_cost);
-            fprintf('   碳排放: %.4f t\n', C_carbon);
-            fprintf('   短期灵活性: kPR=%.3f, kGR=%.3f\n', kPR_d, kGR_d);
-            fprintf('   中长期灵活性: %.2f\n', K_flex);
-            fprintf('   联络开关状态: %s\n', mat2str(round(xL)));
-            fprintf('   SOP容量: %s\n', mat2str(sop_cap_nodes,3));
-        end
-        
-        % 异常检测
-        if isnan(C_cost) || isinf(C_cost) || C_cost <= 0
-            fprintf('⚠️ 异常：经济成本 = %.4f\n', C_cost);
-        end
-        
-        if isnan(K_flex) || isinf(K_flex)
-            fprintf('⚠️ 异常：灵活性指标 = %.4f\n', K_flex);
-        end
-        
-    catch ME
-        fprintf('❌ 目标函数计算失败: %s\n', ME.message);
-        C_cost = 1e6;
-        C_carbon = 1e6;
-        K_flex = 0;
-    end
-end
-
 %% 子函数：简单适应度函数（用于初始化）
 function f = fun_objective(x)
     % 简化的适应度计算，避免初始化时过于复杂
