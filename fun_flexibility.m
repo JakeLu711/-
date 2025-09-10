@@ -12,8 +12,8 @@ function K_SF = fun_flexibility(xL, cap_sop_nodes)
     global tieBranches
     
     %% 1) 识别有效支路
-    % 联络开关支路
-    switch_branches = find(xL == 1);
+   % 联络开关支路（排除已安装SOP的支路）
+    switch_branches = find(xL == 1 & cap_sop_nodes == 0);
     % SOP支路
     sop_branches = find(cap_sop_nodes > 0);
     % 所有有效支路（联络开关或SOP）
@@ -91,5 +91,6 @@ function K_SF = fun_flexibility(xL, cap_sop_nodes)
                 S_switch_total, S_SOP_total);
         fprintf('灵活性指标: K_PR=%.3f (K_PR+=%.3f, K_PR-=%.3f)\n', ...
                 K_PR, K_PR_plus, K_PR_minus);
-        fprintf('           K_GR=%.3f, K_SF=%.3f\n', K_GR, K_SF);
+       fprintf('           K_GR=%.3f, K_SF=%.3f\n', K_GR, K_SF);
     end
+end
