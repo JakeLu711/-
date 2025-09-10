@@ -22,10 +22,12 @@ elseif call_count == 6
 end
 
 try
-    %% ---------- 2) 解码连续 / 离散变量 ----------
-    [cap_pv_nodes, cap_wind_nodes, cap_ess_nodes, xL, cap_sop_nodes] = ...
+   %% ---------- 2) 解码连续 / 离散变量 ----------
+    [cap_pv_nodes, cap_wind_nodes, cap_ess_nodes, branch_types, cap_sop_nodes] = ...
         decode_upper_decisions(x);
 
+    % 将支路类型离散化为0/1开关状态
+    xL = branch_types >= 0.5;
     %% ---------- 3) 计算各类设备台数 ----------
     num_pv_nodes   = round(cap_pv_nodes   * 1e3 / s_pv);
     num_wind_nodes = round(cap_wind_nodes * 1e3 / s_wind);
@@ -83,7 +85,7 @@ try
     catch ME
         warning('fun_objective:flex_eval', ...
                 'fun_flexibility failed: %s', ME.message);
-         K_flex_long = kPR_year + kGR_year + sum(xL==1) * 10;
+        K_flex_long = kPR_year + kGR_year + sum(xL==1 & cap_sop_nodes==0) * 10;
     end
     % 综合灵活性：结合中长期和短期
     % 可以调整权重：0.7为中长期权重，0.3为短期权重
@@ -156,8 +158,8 @@ function C_invest = calculate_investment_cost_2in1(num_pv_nodes, num_wind_nodes,
     C_wind = sum(num_wind_nodes) * s_wind * cwind;
     C_ess = sum(num_ess_nodes) * s_cn * (cP_ess + cE_ess * 4);  % 假设4小时储能
     
-    % 联络开关投资（假设单价）
-    C_switch = sum(xL==1) * 50000;  % 假设每个联络开关5万元
+    % 联络开关投资（假设单价），排除已安装SOP的支路
+    C_switch = sum(xL==1 & cap_sop_nodes==0) * 50000;  % 假设每个联络开关5万元
     
     % SOP投资
     C_sop = 0;
