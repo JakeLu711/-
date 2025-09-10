@@ -1,0 +1,56 @@
+function [cap_pv_nodes, cap_wind_nodes, cap_ess_nodes, xL, cap_sop_nodes] = decode_upper_decisions(x)
+%DECODE_UPPER_DECISIONS Decode upper-level decision vector.
+%   [cap_pv_nodes, cap_wind_nodes, cap_ess_nodes, xL, cap_sop_nodes] =
+%   DECODE_UPPER_DECISIONS(x) decodes the optimisation vector x and
+%   returns the PV/wind/ESS capacities (MW) for each candidate node, the
+%   discrete switch states xL and the SOP capacities (MVA) for each
+%   branch. Capacity values are snapped to integer multiples of the
+%   corresponding unit sizes so that the lower level models receive
+%   properly discretised inputs.
+%
+%   This function centralises the decoding logic so that any future
+%   changes only need to be implemented here.
+
+    %% Global parameters describing system layout and units
+    global st_pvc st_windc st_essc numBr
+    global s_pv s_wind s_cn s_sop_min
+
+    idx = 1;
+
+    %% --- PV, wind and ESS capacities (continuous to discrete) ---
+    cap_pv_nodes   = x(idx:idx+length(st_pvc)-1);   idx = idx + length(st_pvc);
+    cap_wind_nodes = x(idx:idx+length(st_windc)-1); idx = idx + length(st_windc);
+    cap_ess_nodes  = x(idx:idx+length(st_essc)-1);  idx = idx + length(st_essc);
+
+    % number of units and snapped capacities
+    num_pv_nodes   = round(cap_pv_nodes   * 1e3 / s_pv);
+    num_wind_nodes = round(cap_wind_nodes * 1e3 / s_wind);
+    num_ess_nodes  = round(cap_ess_nodes  * 1e3 / s_cn);
+
+    cap_pv_nodes   = num_pv_nodes   * s_pv   / 1e3;
+    cap_wind_nodes = num_wind_nodes * s_wind / 1e3;
+    cap_ess_nodes  = num_ess_nodes  * s_cn   / 1e3;
+
+    %% --- Branch type selection and SOP capacities ---
+    branch_types = x(idx:idx+numBr-1); idx = idx + numBr;
+    sop_cap_raw  = x(idx:idx+numBr-1);
+
+    xL           = zeros(numBr,1);
+    cap_sop_nodes= zeros(numBr,1);
+    for i = 1:numBr
+        if branch_types(i) < 0.5
+            % keep normally open, no device installed
+            xL(i) = 0;
+            cap_sop_nodes(i) = 0;
+        elseif branch_types(i) < 1.5
+            % install tie switch
+            xL(i) = 1;
+            cap_sop_nodes(i) = 0;
+        else
+            % install SOP, capacity rounded to module size (kVA -> MVA)
+            xL(i) = 0;
+            num_sop = round(sop_cap_raw(i) * 1e3 / s_sop_min);
+            cap_sop_nodes(i) = num_sop * s_sop_min / 1e3;
+        end
+    end
+end
