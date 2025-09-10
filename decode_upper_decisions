@@ -1,9 +1,9 @@
-function [cap_pv_nodes, cap_wind_nodes, cap_ess_nodes, xL, cap_sop_nodes] = decode_upper_decisions(x)
+function [cap_pv_nodes, cap_wind_nodes, cap_ess_nodes, branch_types, cap_sop_nodes] = decode_upper_decisions(x)
 %DECODE_UPPER_DECISIONS Decode upper-level decision vector.
-%   [cap_pv_nodes, cap_wind_nodes, cap_ess_nodes, xL, cap_sop_nodes] =
+%   [cap_pv_nodes, cap_wind_nodes, cap_ess_nodes,branch_types, cap_sop_nodes] =
 %   DECODE_UPPER_DECISIONS(x) decodes the optimisation vector x and
-%   returns the PV/wind/ESS capacities (MW) for each candidate node, the
-%   discrete switch states xL and the SOP capacities (MVA) for each
+%   returns the PV/wind/ESS capacities (MW) for each candidate node, the raw
+%   branch type selection variables and the SOP capacities (MVA) for each
 %   branch. Capacity values are snapped to integer multiples of the
 %   corresponding unit sizes so that the lower level models receive
 %   properly discretised inputs.
@@ -35,22 +35,16 @@ function [cap_pv_nodes, cap_wind_nodes, cap_ess_nodes, xL, cap_sop_nodes] = deco
     branch_types = x(idx:idx+numBr-1); idx = idx + numBr;
     sop_cap_raw  = x(idx:idx+numBr-1);
 
-    xL           = zeros(numBr,1);
-    cap_sop_nodes= zeros(numBr,1);
-    for i = 1:numBr
-        if branch_types(i) < 0.5
-            % keep normally open, no device installed
-            xL(i) = 0;
-            cap_sop_nodes(i) = 0;
-        elseif branch_types(i) < 1.5
-            % install tie switch
-            xL(i) = 1;
-            cap_sop_nodes(i) = 0;
-        else
-            % install SOP, capacity rounded to module size (kVA -> MVA)
-            xL(i) = 0;
+     % SOP capacities are only meaningful when branch_types >= 1.5.  The
+     % values are rounded to the minimum SOP module size so that the lower
+     % layer receives discrete capacities.
+     cap_sop_nodes = zeros(numBr,1);
+     for i = 1:numBr
+        if branch_types(i) >= 1.5
             num_sop = round(sop_cap_raw(i) * 1e3 / s_sop_min);
             cap_sop_nodes(i) = num_sop * s_sop_min / 1e3;
+            else
+            cap_sop_nodes(i) = 0;
         end
     end
 end
