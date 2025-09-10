@@ -23,67 +23,19 @@ end
 
 try
     %% ---------- 2) 解码连续 / 离散变量 ----------
-    idx = 1;
-    
-    % 解码PV（每个候选点的容量）
-    cap_pv_nodes = x(idx:idx+length(st_pvc)-1);
-    idx = idx + length(st_pvc);
-    
-    % 解码Wind（每个候选点的容量）
-    cap_wind_nodes = x(idx:idx+length(st_windc)-1);
-    idx = idx + length(st_windc);
-    
-    % 解码ESS（每个候选点的容量）
-    cap_ess_nodes = x(idx:idx+length(st_essc)-1);
-    idx = idx + length(st_essc);
-    
-    % 解码支路类型（2选1）
-    branch_types = x(idx:idx+numBr-1);
-    idx = idx + numBr;
-    
-    % 解码SOP容量
-    sop_cap_raw = x(idx:idx+numBr-1);
-    
-    %% ---------- 3) 处理2选1逻辑 ----------
-    xL = zeros(numBr, 1);           % 联络开关状态
-    cap_sop_nodes = zeros(numBr, 1); % SOP容量
-    
-    for i = 1:numBr
-        if branch_types(i) < 0.5
-            % 常开，不安装任何设备
-            xL(i) = 0;
-            cap_sop_nodes(i) = 0;
-        elseif branch_types(i) < 1.5
-            % 安装联络开关
-            xL(i) = 1;
-            cap_sop_nodes(i) = 0;
-        else
-            % 安装SOP
-            xL(i) = 0;  % 注意：安装SOP时，联络开关状态为0
-            % SOP容量取整到模块数
-            num_sop = round(sop_cap_raw(i) * 1e3 / s_sop_min);
-            cap_sop_nodes(i) = num_sop * s_sop_min / 1e3;  % MVA
-        end
-    end
-    
-    %% ---------- 4) 容量标准化 ----------
-    % PV：每个节点的台数
-    num_pv_nodes = round(cap_pv_nodes * 1e3 / s_pv);
-    cap_pv_nodes = num_pv_nodes * s_pv / 1e3;  % MW
-    
-    % Wind：每个节点的台数
+    [cap_pv_nodes, cap_wind_nodes, cap_ess_nodes, xL, cap_sop_nodes] = ...
+        decode_upper_decisions(x);
+
+    %% ---------- 3) 计算各类设备台数 ----------
+    num_pv_nodes   = round(cap_pv_nodes   * 1e3 / s_pv);
     num_wind_nodes = round(cap_wind_nodes * 1e3 / s_wind);
-    cap_wind_nodes = num_wind_nodes * s_wind / 1e3;  % MW
-    
-    % ESS：每个节点的台数
-    num_ess_nodes = round(cap_ess_nodes * 1e3 / s_cn);
-    cap_ess_nodes = num_ess_nodes * s_cn / 1e3;  % MW
-    
-    %% ---------- 5) 组装传给下层的决策向量 ----------
+    num_ess_nodes  = round(cap_ess_nodes  * 1e3 / s_cn);
+
+    %% ---------- 4) 组装传给下层的决策向量 ----------
     upx = [cap_pv_nodes, cap_wind_nodes, cap_ess_nodes, ...
            xL(:)', cap_sop_nodes(:)'];
            
-    %% ---------- 6) 四季循环计算 ----------
+    %% ---------- 5) 四季循环计算 ----------
     % 初始化年度指标
     C_cost_year = 0;      % 年度运行成本
     C_carbon_year = 0;    % 年度碳排放
@@ -124,7 +76,7 @@ try
         end
     end
     
-       %% ---------- 7) 计算中长期灵活性 ----------
+       %% ---------- 6) 计算中长期灵活性 ----------
     % 中长期灵活性考虑系统配置的长期适应能力
     try
         K_flex_long = fun_flexibility(xL, cap_sop_nodes);   % 越大越好
@@ -137,13 +89,13 @@ try
     % 可以调整权重：0.7为中长期权重，0.3为短期权重
     K_flex_total = 0.7 * K_flex_long + 0.3 * (kPR_year + kGR_year) / 2;
     
-    %% ---------- 8) 计算总成本（包含投资成本） ----------
+    %% ---------- 7) 计算总成本（包含投资成本） ----------
     % 添加年化投资成本
     C_invest = calculate_investment_cost_2in1(num_pv_nodes, num_wind_nodes, ...
                                              num_ess_nodes, xL, cap_sop_nodes);
     C_cost_total = C_cost_year + C_invest;
 
-    %% ---------- 9) 权重正规化 & 综合目标 ----------
+    %% ---------- 8) 权重正规化 & 综合目标 ----------
     w_sum = w_cost_base + w_flex_base + w_carbon_base;
     if w_sum == 0
         warning('fun_objective:weights', '权重和为0，使用默认权重');
@@ -205,7 +157,7 @@ function C_invest = calculate_investment_cost_2in1(num_pv_nodes, num_wind_nodes,
     C_ess = sum(num_ess_nodes) * s_cn * (cP_ess + cE_ess * 4);  % 假设4小时储能
     
     % 联络开关投资（假设单价）
-   C_switch = sum(xL==1) * 50000;  % 假设每个联络开关5万元
+    C_switch = sum(xL==1) * 50000;  % 假设每个联络开关5万元
     
     % SOP投资
     C_sop = 0;
@@ -228,4 +180,3 @@ function C_invest = calculate_investment_cost_2in1(num_pv_nodes, num_wind_nodes,
                 C_ess * CRF_ess + C_sop * CRF_sop + ...
                 C_switch * CRF_switch) / 1e4 / 365;  % 日均
 end
-
