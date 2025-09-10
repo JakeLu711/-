@@ -9,8 +9,13 @@ function [C_cost, C_carbon, K_flex] = evaluate_objectives(x)
     global numBr;
     try
         %% ---- Decode upper level decision variables ----
-        [cap_pv_nodes, cap_wind_nodes, cap_ess_nodes, xL, cap_sop_nodes] = ...
+        [cap_pv_nodes, cap_wind_nodes, cap_ess_nodes, branch_types, cap_sop_nodes] = ...
             decode_upper_decisions(x);
+
+        % Branch types are continuous; convert to binary switch states.  A
+        % value >= 0.5 indicates the branch is closed (either a tie switch
+        % or an SOP), otherwise the branch remains normally open.
+        xL = branch_types >= 0.5;
 
         %% ---- Assemble vector and evaluate lower layer ----
         upx = [cap_pv_nodes, cap_wind_nodes, cap_ess_nodes, xL(:)', cap_sop_nodes(:)'];
