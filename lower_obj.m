@@ -38,6 +38,9 @@ p = p + numBr;
 % SOP容量 (MVA)
 cap_sop_nodes = upx(p:p+numBr-1);
 
+% 防护：确保xL为0/1离散值
+xL = xL >= 0.5;
+
 % CL和SL保持原设计（固定位置和容量）
 loc_CL_idx = 1;  % 使用第一个CL候选位置
 cap_CL = 1;      % 启用CL
@@ -81,26 +84,26 @@ for k = 1:K
         mpc = mpc0;                    % 深拷贝
 
         %% === 处理支路状态（2选1） ===
-        for i = 1:numBr
+         for i = 1:numBr
             br_idx = tieBranches(i);
-            
-            if xL(i) == 1
-                % 安装了联络开关，支路闭合
-                mpc.branch(br_idx, 11) = 1;  % BR_STATUS = 1
-                
-            elseif cap_sop_nodes(i) > 0
+
+            if cap_sop_nodes(i) > 0
                 % 安装了SOP，支路闭合且有容量限制
                 mpc.branch(br_idx, 11) = 1;  % BR_STATUS = 1
                 mpc.branch(br_idx, 6) = cap_sop_nodes(i);  % RATE_A (MVA)
                 % 降低支路阻抗以模拟SOP的低损耗特性
                 mpc.branch(br_idx, 3) = mpc.branch(br_idx, 3) * 0.1;  % 降低电阻
                 mpc.branch(br_idx, 4) = mpc.branch(br_idx, 4) * 0.1;  % 降低电抗
-                
+
+            elseif xL(i) == 1
+                % 安装了联络开关，支路闭合
+                mpc.branch(br_idx, 11) = 1;  % BR_STATUS = 1
+
             else
-                % 常开状态
-                mpc.branch(br_idx, 11) = 0;  % BR_STATUS = 0
+                % 常开状态␊
+                mpc.branch(br_idx, 11) = 0;  % BR_STATUS = 0␊
             end
-        end
+         end
 
         %% === (a) 负荷 (kW→MW) ===
         mpc.bus(:,PD) = baseLoad(t,:)'/1e3;
@@ -244,15 +247,13 @@ end
 if cap_SL > 0
     A_SL = ratio_SL * sum(baseLoad(1, loc_SL));  % SL可双向
 end
-
-% 联络开关和SOP的转移能力␊
-A_switch = sum(xL==1) * 5000;           % 每个联络开关5MVA
-A_SOP = sum(cap_sop_nodes) * 1000;      % MVA转kVA
+% 联络开关和SOP的转移能力
+A_switch = sum(xL==1 & cap_sop_nodes==0) * 5000;           % 每个联络开关5MVA
+A_SOP = sum(cap_sop_nodes) * 1000;      % MVA转kVA␊
 
 % 总调节能力
 A_sum_positive = A_ESS + A_CL + A_SL + A_switch + A_SOP;  % 正向调节（减负荷）
 A_sum_negative = A_ESS + A_SL + A_switch + A_SOP;        % 负向调节（增负荷）
-
 % 根据净负荷情况计算功率灵活性
 fprintf('\n=== 短期功率灵活性计算 ===\n');
 fprintf('净负荷 P_N = %.2f MW\n', P_N);
@@ -280,8 +281,8 @@ kPR_d = max(0, min(kPR_d, 1));
 fprintf('功率调节灵活性 kPR = %.4f\n', kPR_d);
 
 %% 网架调节灵活性
-% 有效支路数（联络开关或SOP）␊
-effective_branches = sum(xL==1) + sum(cap_sop_nodes > 0);
+% 有效支路数（联络开关或SOP）␊␊
+effective_branches = sum(xL==1 & cap_sop_nodes==0) + sum(cap_sop_nodes > 0);
 % 总转移容量
 S_C_total = A_switch + A_SOP;
 
@@ -310,8 +311,8 @@ fprintf('\n多点安装配置:\n');
 fprintf('  PV: %s MW at nodes %s\n', mat2str(cap_pv_nodes, 2), mat2str(st_pvc));
 fprintf('  Wind: %s MW at nodes %s\n', mat2str(cap_wind_nodes, 2), mat2str(st_windc));
 fprintf('  ESS: %s MW at nodes %s\n', mat2str(cap_ess_nodes, 2), mat2str(st_essc));
-fprintf('  Switches: %d个, SOP: %d个 (总%.1f MVA)\n', ...␊
-        sum(xL==1), sum(cap_sop_nodes > 0), sum(cap_sop_nodes));
+fprintf('  Switches: %d个, SOP: %d个 (总%.1f MVA)\n', ...
+    sum(xL==1 & cap_sop_nodes==0), sum(cap_sop_nodes > 0), sum(cap_sop_nodes));
 
 % 构建返回值
 f = zeros(1, 4);  % 预分配
@@ -323,6 +324,4 @@ f(4) = -kGR_d;
 % 最终确认
 fprintf('最终返回值: f = [%.4e, %.4e, %.4e, %.4e]\n', f(1), f(2), f(3), f(4));
 
-
 end  % function lower_obj 结束
-
