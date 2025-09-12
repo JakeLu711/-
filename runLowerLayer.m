@@ -13,6 +13,9 @@ global GA_MAXGEN GA_POPSIZE;
 global w_cost_base w_flex_base w_carbon_base;
 global Ce_min Ce_max kPR_min kPR_max CF_min CF_max;
 global GA_CONVERGENCE_HISTORY;  % 新增：GA收敛历史
+global seasonCenters center_wind;
+global st_pvc st_windc st_essc;
+global UB_PV UB_WIND UB_ESS;  % 记录各类DG可用出力上界
 
 % 清空之前的GA收敛历史
 GA_CONVERGENCE_HISTORY = [];
@@ -35,11 +38,30 @@ end
 % 参数范围约束␊
 ga_max_gen = max(1, min(ga_max_gen, 100));
 ga_pop_size = max(3, min(ga_pop_size, 100));
-
 %% ========== 第3部分：决策变量设置 ==========
+% 解码上层规划以确定各类DG容量
+p = 1;
+pv_cap_nodes   = upx(p:p+length(st_pvc)-1);   p = p + length(st_pvc);
+wind_cap_nodes = upx(p:p+length(st_windc)-1); p = p + length(st_windc);
+ess_cap_nodes  = upx(p:p+length(st_essc)-1);
+
+total_pv_cap   = sum(pv_cap_nodes);   % MW
+total_wind_cap = sum(wind_cap_nodes); % MW
+total_ess_cap  = sum(ess_cap_nodes);  % MW
+
+% 构建各时段可利用出力上界 (MW)
+UB_PV   = zeros(K, T);
+UB_WIND = zeros(K, T);
+UB_ESS  = zeros(K, T);
+for k = 1:K
+    UB_PV(k,:)   = total_pv_cap   * seasonCenters{k};
+    UB_WIND(k,:) = total_wind_cap * center_wind{k};
+    UB_ESS(k,:)  = total_ess_cap;                     % 与时段无关
+end
+
 nVar = 5 * K * T;
 lb = zeros(1, nVar);
-ub = ones(1, nVar);
+ub = [UB_PV(:)'*1000, UB_WIND(:)'*1000, UB_ESS(:)'*1000, ones(1, 2*K*T)];
 
 fprintf('📐 决策变量信息:\n');
 fprintf('   变量总数: %d\n', nVar);
@@ -185,7 +207,26 @@ end
 % 评估调度方案
 function [C_cost_out, C_carbon_out, kPR_d_out, kGR_d_out] = evaluateSchedule(xSched, upx)
     try
-        res = lower_obj(xSched, upx);
+        % 将调度变量从实际功率 (kW) 转换为出力比例 (0-1)
+        global UB_PV UB_WIND UB_ESS K T;
+        pv_idx   = 1:K*T;
+        wind_idx = K*T+1:2*K*T;
+        ess_idx  = 2*K*T+1:3*K*T;
+
+        xRatio = xSched;
+        pv_max   = UB_PV(:)' * 1000;
+        wind_max = UB_WIND(:)' * 1000;
+        ess_max  = UB_ESS(:)' * 1000;
+
+        pv_max(pv_max==0)     = 1;  % 避免除0
+        wind_max(wind_max==0) = 1;
+        ess_max(ess_max==0)   = 1;
+
+        xRatio(pv_idx)   = xSched(pv_idx)   ./ pv_max;
+        xRatio(wind_idx) = xSched(wind_idx) ./ wind_max;
+        xRatio(ess_idx)  = xSched(ess_idx)  ./ ess_max;
+
+        res = lower_obj(xRatio, upx);
         C_cost_out    = res(1);
         C_carbon_out  = res(2);
         kPR_d_out     = -res(3);
