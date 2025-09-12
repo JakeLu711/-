@@ -49,12 +49,18 @@ cap_SL = 1;      % 启用SL
 loc_CL = st_CLc(min(loc_CL_idx, length(st_CLc)));
 loc_SL = st_SLc(min(loc_SL_idx, length(st_SLc)));
 
+% 汇总各类DG总容量 (MW)
+total_pv_cap   = sum(cap_pv_nodes);
+total_wind_cap = sum(cap_wind_nodes);
+total_ess_cap  = sum(cap_ess_nodes);
+
 %% ---------- 2) 解码调度向量 ----------
 q = 1;
 % 注意：为简化，仍使用总量调度，在潮流计算时按容量比例分配
-pv_s   = reshape(xSched(q:q+K*T-1), K, T); q = q + K*T;  % 总PV出力
-wind_s = reshape(xSched(q:q+K*T-1), K, T); q = q + K*T;  % 总Wind出力
-ess_s  = reshape(xSched(q:q+K*T-1), K, T); q = q + K*T;  % 总ESS出力
+% 调度变量：出力比例 (0-1)
+pv_s   = reshape(xSched(q:q+K*T-1), K, T); q = q + K*T;  % PV出力比例
+wind_s = reshape(xSched(q:q+K*T-1), K, T); q = q + K*T;  % Wind出力比例
+ess_s  = reshape(xSched(q:q+K*T-1), K, T); q = q + K*T;  % ESS出力比例
 mu_CL  = reshape(xSched(q:q+K*T-1), K, T); q = q + K*T;
 mu_SL  = reshape(xSched(q:end), K, T);
 
@@ -108,37 +114,28 @@ for k = 1:K
         %% === (a) 负荷 (kW→MW) ===
         mpc.bus(:,PD) = baseLoad(t,:)'/1e3;
 
-        %% === (b) 分布式电源注入（多点） ===
-        % PV：按容量比例分配总出力
-        total_pv_cap = sum(cap_pv_nodes);
-        if total_pv_cap > 0
-            for i = 1:length(st_pvc)
-                if cap_pv_nodes(i) > 0
-                    pv_inject = pv_s(k,t) * (cap_pv_nodes(i) / total_pv_cap);
-                    mpc.bus(st_pvc(i), PD) = mpc.bus(st_pvc(i), PD) - pv_inject/1e3;
-                end
+      %% === (b) 分布式电源注入（多点） ===
+        % PV：出力比例×节点容量×资源曲线 (MW)
+        for i = 1:length(st_pvc)
+            if cap_pv_nodes(i) > 0
+                pv_inject = pv_s(k,t) * cap_pv_nodes(i) * seasonCenters{k}(t);   % MW
+                mpc.bus(st_pvc(i), PD) = mpc.bus(st_pvc(i), PD) - pv_inject;
             end
         end
-        
-        % Wind：按容量比例分配总出力
-        total_wind_cap = sum(cap_wind_nodes);
-        if total_wind_cap > 0
-            for i = 1:length(st_windc)
-                if cap_wind_nodes(i) > 0
-                    wind_inject = wind_s(k,t) * (cap_wind_nodes(i) / total_wind_cap);
-                    mpc.bus(st_windc(i), PD) = mpc.bus(st_windc(i), PD) - wind_inject/1e3;
-                end
+
+        % Wind：出力比例×节点容量×资源曲线 (MW)
+        for i = 1:length(st_windc)
+            if cap_wind_nodes(i) > 0
+                wind_inject = wind_s(k,t) * cap_wind_nodes(i) * center_wind{k}(t);  % MW
+                mpc.bus(st_windc(i), PD) = mpc.bus(st_windc(i), PD) - wind_inject;
             end
         end
-        
-        % ESS：按容量比例分配总出力
-        total_ess_cap = sum(cap_ess_nodes);
-        if total_ess_cap > 0
-            for i = 1:length(st_essc)
-                if cap_ess_nodes(i) > 0
-                    ess_inject = ess_s(k,t) * (cap_ess_nodes(i) / total_ess_cap);
-                    mpc.bus(st_essc(i), PD) = mpc.bus(st_essc(i), PD) - ess_inject/1e3;
-                end
+
+        % ESS：出力比例×节点容量 (MW)
+        for i = 1:length(st_essc)
+            if cap_ess_nodes(i) > 0
+                ess_inject = ess_s(k,t) * cap_ess_nodes(i);  % MW
+                mpc.bus(st_essc(i), PD) = mpc.bus(st_essc(i), PD) - ess_inject;
             end
         end
 
@@ -171,11 +168,13 @@ for k = 1:K
         
         Pg = res.gen(1,2) * 1e3;    % kW
         
-        % 调试信息（只在第一个时段打印）
+         % 调试信息（只在第一个时段打印）
         if t == 1 && k == 1
+            DG_total = pv_s(k,t) * total_pv_cap * seasonCenters{k}(t) + ...
+                       wind_s(k,t) * total_wind_cap * center_wind{k}(t) + ...
+                       ess_s(k,t) * total_ess_cap;
             fprintf('Debug t=%d: 负荷总和=%.2f MW, DG总和=%.2f MW, Pg=%.2f kW\n', ...
-                    t, sum(mpc.bus(:,PD)), ...
-                    (pv_s(k,t) + wind_s(k,t) + ess_s(k,t))/1e3, Pg);
+                    t, sum(mpc.bus(:,PD)), DG_total, Pg);
         end
         
         % 只累积购电量（Pg > 0），售电不计入碳排放
@@ -190,20 +189,20 @@ for k = 1:K
         end
         
         %% === (e) 弃电罚款（考虑多点） ===
-        % PV弃电
+         % PV弃电␊
         for i = 1:length(st_pvc)
             if cap_pv_nodes(i) > 0
-                pv_available = cap_pv_nodes(i) * 1000 * seasonCenters{k}(t);  % kW
-                pv_actual = pv_s(k,t) * (cap_pv_nodes(i) / total_pv_cap);     % kW
+                pv_available = cap_pv_nodes(i) * 1000 * seasonCenters{k}(t);  % kW␊
+                pv_actual    = pv_s(k,t) * cap_pv_nodes(i) * seasonCenters{k}(t) * 1000;  % kW
                 C_q = C_q + gk * cqpv * max(0, pv_available - pv_actual) / 1e4;
             end
         end
-        
-        % Wind弃电
+
+        % Wind弃电␊
         for i = 1:length(st_windc)
             if cap_wind_nodes(i) > 0
-                wind_available = cap_wind_nodes(i) * 1000 * center_wind{k}(t);  % kW
-                wind_actual = wind_s(k,t) * (cap_wind_nodes(i) / total_wind_cap);  % kW
+                wind_available = cap_wind_nodes(i) * 1000 * center_wind{k}(t);  % kW␊
+                wind_actual    = wind_s(k,t) * cap_wind_nodes(i) * center_wind{k}(t) * 1000;  % kW
                 C_q = C_q + gk * cqw * max(0, wind_available - wind_actual) / 1e4;
             end
         end
